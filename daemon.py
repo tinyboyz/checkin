@@ -104,7 +104,7 @@ class Daemon:
         # Try killing the daemon process
         try:
             while 1:
-                os.kill(pid, SIGKILL)
+                os.kill(pid, SIGTERM)
                 time.sleep(0.1)
         except OSError, err:
             err = str(err)
