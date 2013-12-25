@@ -22,9 +22,8 @@ import logging
 import logging.config
 import signal
 from threading import Event
-
 import yaml
-
+from random import randint
 from taobao import Taobao
 from daemon import Daemon
 from apscheduler.scheduler import Scheduler
@@ -37,7 +36,8 @@ class Main(Daemon):
     """
     def __init__(self, pidfile):
         Daemon.__init__(self, pidfile)
-        self.sched = Scheduler(daemonic=False)
+        self.sched_master = Scheduler(daemonic=False)
+        self.taobao_job = None
         self.checkin_conf = 'checkin.yaml'
         self.logger = logging.getLogger(self.__class__.__name__)
         self.taobao_account = {}
@@ -53,17 +53,22 @@ class Main(Daemon):
                 if 'qqbuy' in self.config['website'].keys():
                     self.qqbuy_account = self.config['website']['qqbuy']
 
+    def scheduler_job(self):
+        self.taobao_job = self.sched_master.add_cron_job(lambda: self.taobao_jobs(), hour='{0}'.format(randint(9, 18)),
+                                                         minute='{0}'.format(randint(1, 59)))
+
     def taobao_jobs(self):
+        self.sched_master.unschedule_job(self.taobao_job)
         for k, v in self.taobao_account.iteritems():
             taobao = Taobao(v['username'], v['password'])
             if taobao.login():
                taobao.checkin()
 
     def run(self):
-        self.sched.add_cron_job(lambda: self.taobao_jobs(), hour='9,16,20', minute='35')
-        self.sched.start()
+        self.sched_master.add_cron_job(lambda: self.scheduler_job(), hour='8', minute='50')
+        self.sched_master.start()
         stopevent.wait()
-        self.sched.shutdown()
+        self.sched_master.shutdown()
 
 def showhelp():
     print "usage: python checkin.py start|stop|restart|nodaemon"
