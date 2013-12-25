@@ -2,5 +2,6 @@ version: 1
 
 website:
     taobao:
-        username: paspor
-        password: mydream2009
+        testuser:
+            username: testuser
+            password: testpass
