@@ -92,7 +92,7 @@ class Main(Daemon):
         if self.immediately:
             self.job_taobao()
             self.immediately = False
-        self.scheduler.add_cron_job(lambda: self.job_main(), hour='16', minute='19')
+        self.scheduler.add_cron_job(lambda: self.job_main(), hour='0', minute='1')
         self.scheduler.start()
         stopevent.wait()
         self.scheduler.shutdown()
