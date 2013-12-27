@@ -1,7 +1,7 @@
 #!/usr/bin/python
 """
     CheckIn
-    Copyright (C) 2013  Leon(itasoro@gmail.com)
+    Copyright (C) 2013  Lei Zhang(itasoro@gmail.com)
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,58 +20,87 @@ import os
 import sys
 import logging
 import logging.config
+from datetime import timedelta
+from datetime import datetime
 import signal
 from threading import Event
+import struct
+import time
 import yaml
 from random import randint
+from random import random
 from taobao import Taobao
 from daemon import Daemon
 from apscheduler.scheduler import Scheduler
 
 stopevent = Event()
 
+
 class Main(Daemon):
     """
     do some things
     """
-    def __init__(self, pidfile):
+    def __init__(self, pidfile, cfgfile):
         Daemon.__init__(self, pidfile)
-        self.sched_master = Scheduler(daemonic=False)
-        self.taobao_job = None
-        self.checkin_conf = 'checkin.yaml'
+        self.jobs = {}
+        self.immediately = False
+        self.scheduler = Scheduler(daemonic=False)
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.taobao_account = {}
-        if os.path.exists(self.checkin_conf):
-            with open(self.checkin_conf, 'rt') as f:
-                self.config = yaml.load(f.read())
+        if os.path.exists(cfgfile):
+            with open(cfgfile, 'rt') as f:
+                config = yaml.load(f.read())
+            for k1 in config.keys():
+                if k1 == 'version':
+                    pass
+                if k1 == 'immediately':
+                    self.immediately = config[k1]
+                elif k1 == 'taobao':
+                    self.jobs[k1] = config[k1]
+                    self.jobs[k1]['id'] = None
+                    if 'chktime' in self.jobs[k1].keys():
+                        self.jobs[k1]['btime'] = time.strptime(self.jobs[k1]['chktime'].split('-')[0], '%H:%M')
+                        self.jobs[k1]['etime'] = time.strptime(self.jobs[k1]['chktime'].split('-')[1], '%H:%M')
+                        if self.jobs[k1]['btime'] >= self.jobs[k1]['etime']:
+                            raise ValueError('"chktime" is illegal')
+                    else:
+                        raise ValueError('There is no "chktime" be found in configure.')
+                else:
+                    pass
         else:
-            self.logger.error('checkin.yaml not found')
-        if self.config and 'website' in self.config.keys():
-            if self.config['website']:
-                if 'taobao' in self.config['website'].keys():
-                    self.taobao_account = self.config['website']['taobao']
-                if 'qqbuy' in self.config['website'].keys():
-                    self.qqbuy_account = self.config['website']['qqbuy']
+            self.logger.error('{0} not found'.format(cfgfile))
 
-    def scheduler_job(self):
-        self.taobao_job = self.sched_master.add_cron_job(lambda: self.taobao_jobs(), hour='{0}'.format(randint(9, 18)),
-                                                         minute='{0}'.format(randint(1, 59)))
+    def job_main(self):
+        st_beg = self.jobs['taobao']['btime']
+        st_end = self.jobs['taobao']['etime']
+        dt_beg = datetime.now().replace(hour=st_beg.tm_hour, minute=st_beg.tm_min)
+        dt_end = datetime.now().replace(hour=st_end.tm_hour, minute=st_end.tm_min)
+        td_rnd = dt_end - dt_beg
+        dt_rnd = dt_beg + timedelta(seconds=randint(1, td_rnd.days * 86400 + td_rnd.seconds - 1))
+        if dt_rnd <= datetime.now():
+            dt_rnd += timedelta(days=1)
+        self.jobs['taobao']['id'] = self.scheduler.add_date_job(lambda: self.job_taobao(), dt_rnd)
 
-    def taobao_jobs(self):
-        self.sched_master.unschedule_job(self.taobao_job)
-        for k, v in self.taobao_account.iteritems():
+    def job_taobao(self):
+        if not self.immediately:
+            self.scheduler.unschedule_job(self.jobs['taobao']['id'])
+        for v in self.jobs['taobao']['account']:
             taobao = Taobao(v['username'], v['password'])
             if taobao.login():
-               taobao.checkin()
+                taobao.checkin()
 
     def run(self):
-        self.sched_master.add_cron_job(lambda: self.scheduler_job(), hour='8', minute='50')
-        self.sched_master.start()
+        if self.immediately:
+            self.job_taobao()
+            self.immediately = False
+        self.scheduler.add_cron_job(lambda: self.job_main(), hour='16', minute='19')
+        self.scheduler.start()
         stopevent.wait()
-        self.sched_master.shutdown()
+        self.scheduler.shutdown()
+
 
 def showhelp():
-    print "usage: python checkin.py start|stop|restart|nodaemon"
+    print 'usage: python checkin.py start | stop | restart | nodaemon'
+
 
 def sigterm_handler(signum, frame):
     logging.info('capture {0} signal'.format(signum))
@@ -90,7 +119,11 @@ if __name__ == '__main__':
     else:
         logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
-    daemon = Main('/var/run/checkin.pid')
+    try:
+        daemon = Main('/var/run/checkin.pid', 'checkin.yaml')
+    except ValueError as ex:
+        logger.error(ex)
+        sys.exit(-1)
     if len(sys.argv) == 2:
         if 'start' == sys.argv[1]:
             logger.info('checkin started')
