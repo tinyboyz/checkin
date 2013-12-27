@@ -8,18 +8,15 @@ You need a configure named __'checkin.yaml'__ for running this script while its 
 
 ```yaml
 version 1:
-    website:
-    <your_interest_website1>:
-	    [your_named_label]:
-		    username:[your_accout1_username]
-		    password:[your_accout1_password]
-	    [your_named_label_2]:
-		    username:[your_accout2_username]
-		    password:[your_accout2_password]
-	<your_interest_other_website>:
-	    [your_named_label]:
-		    username:[your_accout_username]
-		    password:[your_accout_password]
+immediately: false # When this script startup, checkin immediately or not.
+taobao:
+    chktime: 08:22-09:20 # The website should be checkin in this period.
+    account:
+	- username:[your_accout1_username]
+	  password:[your_accout1_password]
+	    
+	- username:[your_accout_username]
+	  password:[your_accout_password]
 ```
 
 Note: Support website(you can replace content in angle brackets):
