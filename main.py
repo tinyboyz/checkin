@@ -81,8 +81,6 @@ class Main(Daemon):
         self.jobs['taobao']['id'] = self.scheduler.add_date_job(lambda: self.job_taobao(), dt_rnd)
 
     def job_taobao(self):
-        if not self.immediately:
-            self.scheduler.unschedule_job(self.jobs['taobao']['id'])
         for v in self.jobs['taobao']['account']:
             taobao = Taobao(v['username'], v['password'])
             if taobao.login():
